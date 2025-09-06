@@ -79,7 +79,6 @@ export default function AlumniList() {
 
   useEffect(() => {
     if (user) load();
-    // eslint-disable-next-line
   }, [department, section, user]);
 
   if (!user) return null;

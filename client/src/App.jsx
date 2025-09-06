@@ -62,12 +62,7 @@ export default function App() {
         {user && user.role === "admin" && (
           <Link to="/admin" style={linkStyle}>Admin</Link>
         )}
-        {/* {user && (
-          <>
-            <Link to="/alumni" style={linkStyle}>Alumni</Link>
-            <Link to="/chat" style={linkStyle}>Chat</Link>
-          </>
-        )} */}
+        
         {user && (
           <span style={userInfoStyle}>
             Hi, {user.name} ({user.role})

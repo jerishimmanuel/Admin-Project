@@ -88,7 +88,6 @@ export default function Signup() {
           onChange={e => setForm({ ...form, password: e.target.value })}
           required
         />
-        {/* Role is fixed as admin */}
         <button style={buttonStyle} type="submit" disabled={loading}>
           {loading ? "Signing up..." : "Signup"}
         </button>

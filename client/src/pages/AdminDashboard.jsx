@@ -80,22 +80,6 @@ const alumniCardStyle = {
   border: "1px solid #e5e7eb",
 };
 
-const tableStyle = {
-  width: "100%",
-  borderCollapse: "collapse",
-  marginTop: 16,
-  background: "#fff",
-  borderRadius: 8,
-  overflow: "hidden",
-  boxShadow: "0 1px 6px #0001",
-};
-
-const thtdStyle = {
-  padding: "10px 16px",
-  borderBottom: "1px solid #e5e7eb",
-  textAlign: "center",
-};
-
 const inputStyle = {
   width: "100%",
   padding: "10px 12px",
@@ -146,7 +130,6 @@ const labelStyle = { fontWeight: 500, marginBottom: 4, display: "block" };
 const tabs = [
   { key: "dashboard", label: "Dashboard" },
   { key: "alumni", label: "Alumni List" },
-  { key: "stats", label: "Dept & Section Stats" },
   { key: "chat", label: "Chat" },
 ];
 
@@ -169,7 +152,6 @@ export default function AdminDashboard() {
   const [msg, setMsg] = useState("");
   const [msgType, setMsgType] = useState("success");
   const [file, setFile] = useState(null);
-  const [stats, setStats] = useState([]);
   const [counts, setCounts] = useState({ alumni: 0, students: 0 });
   const [alumniList, setAlumniList] = useState([]);
   const [activeTab, setActiveTab] = useState("dashboard");
@@ -179,12 +161,18 @@ export default function AdminDashboard() {
     : { name: "Admin", id: "admin" };
   const [chatMessages, setChatMessages] = useState([]);
   const [chatInput, setChatInput] = useState("");
+  const [selectedAlumni, setSelectedAlumni] = useState(null); // For 1-1 chat
+  const [batchMsg, setBatchMsg] = useState("");
+  const [batchMsgStatus, setBatchMsgStatus] = useState("");
   const socketRef = useRef(null);
   const chatEndRef = useRef(null);
 
   useEffect(() => {
     socketRef.current = io("http://localhost:5000");
     socketRef.current.on("chat message", (msg) => {
+      setChatMessages((prev) => [...prev, msg]);
+    });
+    socketRef.current.on("private message", (msg) => {
       setChatMessages((prev) => [...prev, msg]);
     });
     return () => {
@@ -203,9 +191,23 @@ export default function AdminDashboard() {
       user: user.name || "Admin",
       text: chatInput,
       time: new Date().toLocaleTimeString(),
+      to: selectedAlumni ? selectedAlumni.email : null,
+      from: user.email || "admin",
     };
-    socketRef.current.emit("chat message", msg);
+    if (selectedAlumni) {
+      socketRef.current.emit("private message", msg);
+    } else {
+      socketRef.current.emit("chat message", msg);
+    }
     setChatInput("");
+  }
+
+  function sendBatchMessage(batch) {
+    if (!batchMsg.trim()) return;
+
+    setBatchMsgStatus(`Message sent to batch ${batch} (simulate)`);
+    setTimeout(() => setBatchMsgStatus(""), 2000);
+    setBatchMsg("");
   }
 
   function isCourseCompleted() {
@@ -245,8 +247,12 @@ export default function AdminDashboard() {
         section: "A",
         passOutYear: "",
         courseDurationYears: "4",
+        placed: false,
+        company: "",
+        location: "",
+        designation: "",
+        minCTC: "",
       });
-      await loadStats();
       await loadCounts();
       await loadAlumniList();
     } catch (e) {
@@ -274,18 +280,12 @@ export default function AdminDashboard() {
         `✅ Uploaded: created ${data.created}, skipped ${data.skipped.length}, errors ${data.errors.length}`
       );
       setFile(null);
-      await loadStats();
       await loadCounts();
       await loadAlumniList();
     } catch (e) {
       setMsgType("error");
       setMsg(e.response?.data?.message || "Upload failed");
     }
-  }
-
-  async function loadStats() {
-    const { data } = await api.get("/alumni/stats", { headers: authHeader() });
-    setStats(data);
   }
 
   async function loadCounts() {
@@ -307,20 +307,35 @@ export default function AdminDashboard() {
   }
 
   useEffect(() => {
-    loadStats();
     loadCounts();
     loadAlumniList();
   }, []);
 
+  function getBatchWiseAlumni() {
+    const batches = {};
+    alumniList.forEach(alum => {
+      const batch = alum.passOutYear || "Unknown";
+      if (!batches[batch]) batches[batch] = [];
+      batches[batch].push(alum);
+    });
+   
+    const sortedBatches = Object.keys(batches)
+      .sort((a, b) => b - a)
+      .map(batch => ({ batch, students: batches[batch] }));
+    return sortedBatches;
+  }
+
   return (
     <div style={{ background: "#f3f6fa", minHeight: "100vh", padding: 32, display: "flex" }}>
-
       <div style={sidebarStyle}>
         {tabs.map((tab) => (
           <button
             key={tab.key}
             style={sidebarTabStyle(activeTab === tab.key)}
-            onClick={() => setActiveTab(tab.key)}
+            onClick={() => {
+              setActiveTab(tab.key);
+              setSelectedAlumni(null);
+            }}
           >
             {tab.label}
           </button>
@@ -346,7 +361,7 @@ export default function AdminDashboard() {
               </div>
             </div>
             <div style={{ color: "#64748b", marginBottom: 32 }}>
-              Manage alumni, upload data, and view department stats.
+              Manage alumni, upload data, and view batch-wise alumni.
             </div>
             <div style={cardStyle}>
               <h3>Add Alumni (Manual)</h3>
@@ -533,75 +548,92 @@ export default function AdminDashboard() {
           </>
         )}
 
-
         {activeTab === "alumni" && (
           <div style={cardStyle}>
-            <h3>Alumni List</h3>
-            <div style={alumniGridStyle}>
-              {alumniList.length === 0 && (
-                <div style={{ gridColumn: "1/-1", textAlign: "center", color: "#64748b" }}>
-                  No alumni found.
+            <h3>Alumni List (Batch Wise)</h3>
+            {getBatchWiseAlumni().length === 0 && (
+              <div style={{ textAlign: "center", color: "#64748b" }}>
+                No alumni found.
+              </div>
+            )}
+            {getBatchWiseAlumni().map(({ batch, students }) => (
+              <div key={batch} style={{ marginBottom: 32 }}>
+                <h4 style={{ color: "#2563eb", marginBottom: 8 }}>
+                  Batch: {batch}
+                </h4>
+                <div style={{ marginBottom: 12 }}>
+                  <form
+                    onSubmit={e => {
+                      e.preventDefault();
+                      sendBatchMessage(batch);
+                    }}
+                    style={{ display: "flex", gap: 8, alignItems: "center" }}
+                  >
+                    <input
+                      style={inputStyle}
+                      placeholder={`Message to all students in batch ${batch}`}
+                      value={batchMsg}
+                      onChange={e => setBatchMsg(e.target.value)}
+                    />
+                    <button style={buttonStyle} type="submit">
+                      Send to Batch
+                    </button>
+                  </form>
+                  {batchMsgStatus && (
+                    <div style={{ color: "#15803d", marginTop: 4 }}>{batchMsgStatus}</div>
+                  )}
                 </div>
-              )}
-              {alumniList.map((alum, idx) => (
-                <div key={alum._id || idx} style={alumniCardStyle}>
-                  <div style={{ fontWeight: 600, fontSize: 18, color: "#2563eb" }}>{alum.name}</div>
-                  <div style={{ margin: "4px 0", color: "#555" }}>{alum.email}</div>
-                  <div style={{ fontSize: 14, color: "#64748b" }}>
-                    <b>Dept:</b> {alum.department} &nbsp; <b>Sec:</b> {alum.section}
-                  </div>
-                  <div style={{ fontSize: 14, color: "#64748b" }}>
-                    <b>Reg No:</b> {alum.registerNumber} &nbsp; <b>Phone:</b> {alum.phone}
-                  </div>
-                  <div style={{ fontSize: 13, color: "#64748b" }}>
-                    <b>Pass-out:</b> {alum.passOutYear} &nbsp; <b>Duration:</b> {alum.courseDurationYears} yrs
-                  </div>
-                  <div style={{ fontSize: 13, color: alum.placed ? "#15803d" : "#b91c1c", marginTop: 4 }}>
-                    <b>Placed:</b> {alum.placed ? "Yes" : "No"}
-                    {alum.placed && (
-                      <>
-                        <br />
-                        <b>Company:</b> {alum.company} <br />
-                        <b>Location:</b> {alum.location} <br />
-                        <b>Min CTC:</b> {alum.minCTC} LPA
-                      </>
-                    )}
-                  </div>
+                <div style={alumniGridStyle}>
+                  {students.map((alum, idx) => (
+                    <div key={alum._id || idx} style={alumniCardStyle}>
+                      <div style={{ fontWeight: 600, fontSize: 18, color: "#2563eb" }}>{alum.name}</div>
+                      <div style={{ margin: "4px 0", color: "#555" }}>{alum.email}</div>
+                      <div style={{ fontSize: 14, color: "#64748b" }}>
+                        <b>Dept:</b> {alum.department} &nbsp; <b>Sec:</b> {alum.section}
+                      </div>
+                      <div style={{ fontSize: 14, color: "#64748b" }}>
+                        <b>Reg No:</b> {alum.registerNumber} &nbsp; <b>Phone:</b> {alum.phone}
+                      </div>
+                      <div style={{ fontSize: 13, color: "#64748b" }}>
+                        <b>Pass-out:</b> {alum.passOutYear} &nbsp; <b>Duration:</b> {alum.courseDurationYears} yrs
+                      </div>
+                      <div style={{ fontSize: 13, color: alum.placed ? "#15803d" : "#b91c1c", marginTop: 4 }}>
+                        <b>Placed:</b> {alum.placed ? "Yes" : "No"}
+                        {alum.placed && (
+                          <>
+                            <br />
+                            <b>Company:</b> {alum.company} <br />
+                            <b>Location:</b> {alum.location} <br />
+                            <b>Designation:</b> {alum.designation} <br />
+                            <b>Min CTC:</b> {alum.minCTC} LPA
+                          </>
+                        )}
+                      </div>
+                      <button
+                        style={{ ...buttonStyle, marginTop: 10, background: "#475569" }}
+                        onClick={() => {
+                          setActiveTab("chat");
+                          setSelectedAlumni(alum);
+                          setChatMessages([]);
+                        }}
+                      >
+                        Chat with {alum.name}
+                      </button>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+              </div>
+            ))}
           </div>
         )}
-
-
-        {activeTab === "stats" && (
-          <div style={cardStyle}>
-            <h3>Department & Section Counts</h3>
-            <table style={tableStyle}>
-              <thead>
-                <tr style={{ background: "#f1f5f9" }}>
-                  <th style={thtdStyle}>Department</th>
-                  <th style={thtdStyle}>Section</th>
-                  <th style={thtdStyle}>Count</th>
-                </tr>
-              </thead>
-              <tbody>
-                {stats.map((r, i) => (
-                  <tr key={i}>
-                    <td style={thtdStyle}>{r._id.department}</td>
-                    <td style={thtdStyle}>{r._id.section}</td>
-                    <td style={thtdStyle}>{r.count}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-
 
         {activeTab === "chat" && (
           <div style={cardStyle}>
-            <h3>Admin Chat</h3>
+            <h3>
+              {selectedAlumni
+                ? `Chat with ${selectedAlumni.name}`
+                : "Admin Broadcast Chat"}
+            </h3>
             <div style={chatBoxStyle}>
               {chatMessages.length === 0 ? (
                 <div style={{ color: "#64748b", textAlign: "center" }}>
@@ -625,7 +657,11 @@ export default function AdminDashboard() {
             >
               <input
                 style={inputStyle}
-                placeholder="Type a message..."
+                placeholder={
+                  selectedAlumni
+                    ? `Message to ${selectedAlumni.name}`
+                    : "Type a message..."
+                }
                 value={chatInput}
                 onChange={(e) => setChatInput(e.target.value)}
                 onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) sendChat(e); }}
@@ -634,8 +670,18 @@ export default function AdminDashboard() {
                 Send
               </button>
             </form>
+            {selectedAlumni && (
+              <button
+                style={{ ...buttonStyle, marginTop: 10, background: "#64748b" }}
+                onClick={() => setSelectedAlumni(null)}
+              >
+                Back to Broadcast Chat
+              </button>
+            )}
             <div style={{ marginTop: 16, color: "#64748b", fontSize: 14 }}>
-              <b>Note:</b> All admins see the same chat (broadcast).
+              <b>Note:</b> {selectedAlumni
+                ? "This is a private chat with the selected alumni."
+                : "All admins and alumni see the broadcast chat."}
             </div>
           </div>
         )}

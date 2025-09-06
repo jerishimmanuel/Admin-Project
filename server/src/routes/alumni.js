@@ -11,7 +11,6 @@ import { sendCongratsEmail } from "../utils/mailer.js";
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
 
-// Admin: add alumni manually
 router.post("/",
   auth(["admin"]),
   body("name").notEmpty(),
@@ -22,7 +21,6 @@ router.post("/",
   body("section").isIn(SECTIONS),
   body("passOutYear").isInt({ min: 1900 }),
   body("courseDurationYears").isInt({ min: 1, max: 6 }),
-  // Optionally validate placed/company/location/minCTC/designation
   async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array(), message: "Validation failed" });
@@ -63,9 +61,6 @@ router.post("/",
     res.json(alum);
   }
 );
-
-// Admin: bulk upload via Excel
-// Expect columns: name,email,phone,registerNumber,department,section,passOutYear,courseDurationYears,placed,company,location,minCTC,designation
 router.post("/upload", auth(["admin"]), upload.single("file"), async (req, res) => {
   if (!req.file) return res.status(400).json({ message: "File is required" });
   const wb = xlsx.read(req.file.buffer, { type: "buffer" });
@@ -123,7 +118,6 @@ router.post("/upload", auth(["admin"]), upload.single("file"), async (req, res) 
   res.json(results);
 });
 
-// View alumni by department and section with counts
 router.get("/stats", auth(["admin"]), async (req, res) => {
   const pipeline = [
     { $group: { _id: { department: "$department", section: "$section" }, count: { $sum: 1 } } },

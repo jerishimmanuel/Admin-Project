@@ -41,17 +41,15 @@ app.get("/", (_, res) =>
   `)
 );
 
-// Health check endpoint
 app.get("/health", (_, res) => res.json({ status: "ok", uptime: process.uptime() }));
 
 app.use("/api/auth", authRoutes);
 app.use("/api/alumni", alumniRoutes);
 app.use("/api/chat", chatRoutes);
 
-// --- Socket.IO Chat (broadcast to all clients) ---
 io.on("connection", (socket) => {
   socket.on("chat message", (msg) => {
-    io.emit("chat message", msg); // broadcast to all clients
+    io.emit("chat message", msg); 
   });
 });
 
