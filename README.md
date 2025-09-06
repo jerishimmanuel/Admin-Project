@@ -1,4 +1,4 @@
-# MERN Alumni Portal (Kongu-style)
+# MERN Alumni Portal 
 Features:
 - JWT auth (roles: student, alumni, admin). Students must use `@kongu.edu` email at signup.
 - Admin adds alumni manually (enforced department list & sections A–F) or via Excel upload.
